@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Wonders Unseen</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Four wonders the Star Wars novels described and no film ever showed, built in 3D to play with.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..700&family=Michroma&display=swap">
+<link rel="stylesheet" href="css/style.css">
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.min.js", "three/addons/": "./vendor/three/addons/" } }
+</script>
+</head>
+<body>
+<!--page-->
+<div id="app" data-view="map">
+  <canvas id="stage" aria-label="3D view"></canvas>
+  <div id="flash" aria-hidden="true"></div>
+
+  <div id="hud">
+    <header class="topbar">
+      <button id="btn-map" class="chip" type="button" hidden><span aria-hidden="true">&#9666;</span> Galaxy map</button>
+      <span class="wordmark" id="wordmark">Phase 1 &middot; Four wonders</span>
+      <button id="btn-sound" class="chip" type="button" aria-pressed="true">Sound on</button>
+    </header>
+
+    <section id="intro" class="block">
+      <h1 class="title">Wonders <em>Unseen</em></h1>
+      <p class="lede">Four marvels the Star Wars novels described and no film ever showed. Pick one and play with it.</p>
+      <p class="fine">A fan-made tribute. Not affiliated with Lucasfilm or Disney.</p>
+    </section>
+
+    <section id="card" class="block" hidden>
+      <p class="kicker" id="card-kicker"></p>
+      <h1 class="name" id="card-name"></h1>
+      <p class="tag" id="card-tag"></p>
+      <p class="blurb" id="card-blurb"></p>
+      <p class="fine" id="card-since"></p>
+    </section>
+
+    <div id="toast" role="status" aria-live="polite"></div>
+
+    <footer id="controls">
+      <p class="readout" id="readout"></p>
+      <div class="row">
+        <button id="btn-prev" class="nav" type="button" aria-label="Previous wonder" hidden>&#8249;</button>
+        <div id="actions"></div>
+        <button id="btn-next" class="nav" type="button" aria-label="Next wonder" hidden>&#8250;</button>
+      </div>
+      <p class="hint" id="hint">Pick a wonder to visit. Drag to turn the galaxy.</p>
+    </footer>
+  </div>
+
+  <div id="beacons"></div>
+
+  <div id="fail" hidden>
+    <p>This page needs WebGL to draw its 3D scenes, and this browser has it switched off. Try a recent version of Chrome, Firefox, Safari or Edge.</p>
+  </div>
+</div>
+<!--/page-->
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
