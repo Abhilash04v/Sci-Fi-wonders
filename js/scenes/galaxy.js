@@ -151,12 +151,14 @@ export function create(app) {
   }
 
   const v = new THREE.Vector3(), intro = document.getElementById('intro');
+  let frames = 0;
   function placeLabels() {
+    frames++;
     const W = app.width, H = app.height, pad = 16;
     for (const b of beacons) {
       v.copy(b.pos).project(app.camera);
       b.sx = (v.x * 0.5 + 0.5) * W; b.sy = (-v.y * 0.5 + 0.5) * H;
-      if (!b.w) { b.w = b.el.offsetWidth; b.h = b.el.offsetHeight; }
+      if (!b.w || frames % 90 === 0) { b.w = b.el.offsetWidth; b.h = b.el.offsetHeight; }
       const left = b.sx > W * 0.6;
       b.x = left ? b.sx - b.w - 16 : b.sx + 16;
       b.y = b.sy - b.h / 2;
