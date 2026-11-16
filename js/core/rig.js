@@ -19,6 +19,7 @@ export class OrbitRig {
     this.shake = 0;
     this.fit = 1;            // extra distance for portrait screens
     this.roll = 0;           // quarter-turn the view (used to stand a wide scene upright on phones)
+    this.minY = -Infinity;   // keep the camera above the ground in scenes that have one
     this.damping = 5;
     this._v = new THREE.Vector3();
   }
@@ -29,7 +30,7 @@ export class OrbitRig {
     if (o.theta !== undefined) this.goalTheta = o.theta;
     if (o.phi !== undefined) this.goalPhi = o.phi;
     if (o.radius !== undefined) this.goalRadius = o.radius;
-    for (const k of ['minPhi', 'maxPhi', 'minRadius', 'maxRadius', 'auto', 'damping']) if (o[k] !== undefined) this[k] = o[k];
+    for (const k of ['minPhi', 'maxPhi', 'minRadius', 'maxRadius', 'auto', 'damping', 'minY']) if (o[k] !== undefined) this[k] = o[k];
     if (o.snap) {
       this.target.copy(this.goalTarget);
       this.theta = this.goalTheta; this.phi = this.goalPhi; this.radius = this.goalRadius;
@@ -38,7 +39,7 @@ export class OrbitRig {
   }
 
   rotate(dx, dy) {
-    if (this.roll) [dx, dy] = [dy, -dx];
+    if (this.roll) { const s = Math.sign(this.roll); [dx, dy] = [dy * s, -dx * s]; }
     this.goalTheta -= dx * 0.0055;
     this.goalPhi = clamp(this.goalPhi - dy * 0.0055, this.minPhi, this.maxPhi);
     this.idle = 0;
@@ -64,6 +65,7 @@ export class OrbitRig {
       this.target.y + r * Math.cos(this.phi),
       this.target.z + r * sp * Math.cos(this.theta),
     );
+    if (this.camera.position.y < this.minY) this.camera.position.y = this.minY;
     this.camera.lookAt(this.target);
     if (this.roll) this.camera.rotateZ(this.roll);
     if (this.shake > 0.0005) {

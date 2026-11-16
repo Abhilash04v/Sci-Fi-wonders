@@ -13,8 +13,14 @@ import * as zonama from './scenes/zonama.js';
 import * as centerpoint from './scenes/centerpoint.js';
 import * as thonboka from './scenes/thonboka.js';
 import * as suncrusher from './scenes/suncrusher.js';
+import * as cathedral from './scenes/cathedral.js';
+import * as maw from './scenes/maw.js';
+import * as alderaan from './scenes/alderaan.js';
+import * as katana from './scenes/katana.js';
 
-const WONDERS = [zonama, centerpoint, thonboka, suncrusher];
+const PHASE = 2;
+const WONDERS = [zonama, centerpoint, thonboka, suncrusher, cathedral, maw, alderaan, katana];
+const COUNT = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve'][WONDERS.length] ?? String(WONDERS.length);
 const SCENES = { map: galaxy };
 for (const w of WONDERS) SCENES[w.meta.id] = w;
 
@@ -145,6 +151,28 @@ function buildActions(inst) {
   box.textContent = '';
   actionButtons.clear();
   for (const a of inst.actions ?? []) {
+    if (a.kind === 'choice') {
+      // a row of colour swatches; one is always selected
+      const group = document.createElement('div');
+      group.className = 'swatches'; group.setAttribute('role', 'radiogroup'); group.setAttribute('aria-label', a.verb);
+      for (const o of a.options) {
+        const s = document.createElement('button');
+        s.type = 'button'; s.className = 'swatch'; s.id = `swatch-${o.id}`; s.title = o.label;
+        s.style.setProperty('--sw', o.color);
+        s.setAttribute('role', 'radio'); s.setAttribute('aria-label', o.label); s.setAttribute('aria-checked', String(o.id === a.value));
+        s.addEventListener('click', () => {
+          if (busy) return;
+          sound.wake();
+          a.value = o.id;
+          for (const el of group.children) el.setAttribute('aria-checked', String(el === s));
+          a.pick?.(o.id);
+        });
+        group.append(s);
+      }
+      const brk = document.createElement('span'); brk.className = 'break';
+      box.append(group, brk);
+      continue;
+    }
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'action'; b.id = `action-${a.id}`;
     const verb = document.createElement('span'); verb.className = 'verb'; verb.textContent = a.verb;
@@ -180,10 +208,10 @@ function showCard(meta) {
   $('card').hidden = isMap;
   $('btn-map').hidden = isMap;
   $('btn-prev').hidden = $('btn-next').hidden = isMap;
-  $('wordmark').textContent = isMap ? 'Phase 1 · Four wonders' : 'Wonders Unseen';
+  $('wordmark').textContent = isMap ? `Phase ${PHASE} · ${COUNT} wonders` : 'Wonders Unseen';
   if (!isMap) {
     const i = WONDERS.findIndex((w) => w.meta.id === meta.id);
-    $('card-kicker').textContent = `Wonder ${i + 1} of ${WONDERS.length}`;
+    $('card-kicker').textContent = `Wonder ${i + 1} of ${WONDERS.length}` + (meta.isNew ? ' \u00b7 New' : '');
     $('card-name').textContent = meta.name;
     $('card-tag').textContent = meta.tag;
     $('card-blurb').textContent = meta.blurb;
@@ -192,6 +220,7 @@ function showCard(meta) {
   app.hint(meta.hint ?? '');
   app.readout('');
   setAccent(meta.accent);
+  root.style.setProperty('--scrim', meta.scrim ?? 1);   // bright daytime scenes want a lighter veil behind the text
 }
 
 function activate(id) {
@@ -200,12 +229,14 @@ function activate(id) {
   current = inst; currentId = id;
   renderPass.scene = inst.scene;
   app.baseFov = mod.meta.fov ?? 50;
+  renderer.toneMappingExposure = mod.meta.exposure ?? 1;
   app.bloomBase = mod.meta.bloom?.strength ?? 0.8;
   bloom.radius = mod.meta.bloom?.radius ?? 0.6;
   bloom.threshold = mod.meta.bloom?.threshold ?? 0.7;
   rig.enabled = inst.usesRig !== false;
   rig.shake = 0;
   rig.roll = 0;
+  rig.minY = -Infinity;
   resize();
   warp.setColor('#bfdcff');
   showCard(mod.meta);
@@ -278,6 +309,14 @@ $('btn-sound').addEventListener('click', (e) => {
   e.currentTarget.textContent = on ? 'Sound on' : 'Sound off';
 });
 
+// "Just look": put the interface away and leave only the view. A tap brings it back.
+function setLooking(on) {
+  root.classList.toggle('looking', on);
+  $('btn-look').setAttribute('aria-pressed', String(on));
+  if (on) app.toast('Tap anywhere to bring the controls back.', 2.4);
+}
+$('btn-look').addEventListener('click', () => setLooking(true));
+
 const pointers = new Map();
 let captured = false, pinch = 0;
 const ndcOf = (e) => {
@@ -289,12 +328,16 @@ canvas.addEventListener('pointerdown', (e) => {
   sound.wake();
   try { canvas.setPointerCapture(e.pointerId); } catch {}
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, t: performance.now() });
-  if (pointers.size === 1 && current && !busy) captured = !!current.onPointerDown?.(e, ndcOf(e));
+  // Shift-drag, right-drag or two fingers always turn the camera, even where a plain drag steers or paints.
+  const lookOnly = e.button === 2 || e.shiftKey;
+  if (pointers.size === 1 && current && !busy && !lookOnly) captured = !!current.onPointerDown?.(e, ndcOf(e));
   if (pointers.size === 2) {
+    if (captured) { current?.onPointerUp?.(e, ndcOf(e)); captured = false; }
     const [a, b] = [...pointers.values()];
     pinch = Math.hypot(a.x - b.x, a.y - b.y);
   }
 });
+canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 canvas.addEventListener('pointermove', (e) => {
   const p = pointers.get(e.pointerId);
   if (!p) return;
@@ -305,6 +348,7 @@ canvas.addEventListener('pointermove', (e) => {
     const [a, b] = [...pointers.values()];
     const d = Math.hypot(a.x - b.x, a.y - b.y);
     if (pinch > 0 && rig.enabled) rig.zoom(pinch / d);
+    if (rig.enabled) rig.rotate(dx * 0.5, dy * 0.5);
     pinch = d;
   } else if (captured) {
     current.onPointerMove?.(e, ndcOf(e), { dx, dy, ox: e.clientX - p.sx, oy: e.clientY - p.sy });
@@ -318,8 +362,12 @@ const endPointer = (e) => {
   pointers.delete(e.pointerId);
   if (!current) return;
   const moved = Math.hypot(e.clientX - p.sx, e.clientY - p.sy);
-  if (captured) current.onPointerUp?.(e, ndcOf(e));
-  else if (!busy && e.type === 'pointerup' && moved < 8 && performance.now() - p.t < 400) current.onTap?.(ndcOf(e));
+  const tapped = e.type === 'pointerup' && moved < 8 && performance.now() - p.t < 400;
+  if (tapped && root.classList.contains('looking')) {
+    if (captured) current.onPointerUp?.(e, ndcOf(e));
+    setLooking(false);
+  } else if (captured) current.onPointerUp?.(e, ndcOf(e));
+  else if (!busy && tapped) current.onTap?.(ndcOf(e));
   if (pointers.size === 0) captured = false;
 };
 canvas.addEventListener('pointerup', endPointer);
@@ -339,6 +387,8 @@ window.addEventListener('keydown', (e) => {
   sound.wake();
   keysDown.add(k);
   if (busy || !current) return;
+  if (root.classList.contains('looking') && (k === 'Escape' || k === 'l')) { setLooking(false); return; }
+  if (k === 'l') { setLooking(true); return; }
   if (k === 'Escape' || k === 'm') { go('map'); return; }
   const onButton = document.activeElement?.classList?.contains('action');
   for (const a of current.actions ?? []) {
@@ -407,6 +457,7 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 
+$('lede').textContent = `${COUNT} marvels the Star Wars novels described and no film ever showed. Pick one and play with it.`;
 resize();
 const start = (location.hash || '').replace('#', '');
 go(SCENES[start] ? start : 'map');

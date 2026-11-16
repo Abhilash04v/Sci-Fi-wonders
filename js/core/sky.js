@@ -17,8 +17,13 @@ uniform float uSeed, uDensity, uDust, uGain, uScale;
 uniform vec3 uFocus;      // direction of an optional bright band or dark opening
 uniform float uBand;      // > 0 : a milky band around the plane normal to uFocus
 uniform float uHole;      // > 0 : a darker opening around uFocus
+uniform float uGrad;      // > 0 : a planet's sky, fading from uHorizon up to uBase
+uniform vec3 uHorizon;
+uniform float uStars;     // > 0 : stars painted into the backdrop itself (so lenses can bend them)
+uniform float uStarScale;
 ${NOISE}
 float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float hash3(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
 void main(){
   float phi = vUv.x * 6.28318530718;
   float lat = (vUv.y - 0.5) * 3.14159265359;
@@ -43,7 +48,19 @@ void main(){
     float h = smoothstep(0.55, 0.95, dot(d, normalize(uFocus)) + 0.08 * w.x);
     col *= 1.0 - uHole * h;
   }
-  col = uBase + col * uGain;
+  if (uGrad > 0.0) col = mix(uHorizon, uBase, smoothstep(-0.03, uGrad, d.y)) + col * uGain;
+  else col = uBase + col * uGain;
+  if (uStars > 0.0) {
+    vec3 sp = d * uStarScale;
+    vec3 cell = floor(sp);
+    if (hash3(cell) > 1.0 - 0.07 * uStars) {
+      vec3 at = cell + 0.3 + 0.4 * vec3(hash3(cell + 1.7), hash3(cell + 5.3), hash3(cell + 9.1));
+      float s = 1.0 - smoothstep(0.0, 0.55, length(sp - at));
+      float br = pow(hash3(cell + 3.3), 4.0) * 3.0 + 0.3;
+      vec3 tint = mix(vec3(1.0, 0.85, 0.7), vec3(0.75, 0.85, 1.0), hash3(cell + 7.7));
+      col += tint * s * s * br * (1.0 - 0.7 * dust);
+    }
+  }
   col += (hash(vUv * 2048.0) - 0.5) / 255.0;
   // stored gamma-2 to keep the dark end smooth in 8 bits
   gl_FragColor = vec4(sqrt(max(col, 0.0)), 1.0);
@@ -68,11 +85,11 @@ let bakeScene, bakeCam, bakeMat;
 
 /**
  * A nebula sky dome. Call `.paint(options)` to (re)bake it.
- * options: { a, b, c, base, seed, density, dust, gain, scale, focus, band, hole }
+ * options: { a, b, c, base, seed, density, dust, gain, scale, focus, band, hole, horizon, stars }
  */
-export function makeSky(renderer, options) {
+export function makeSky(renderer, options, width) {
   const small = Math.min(window.innerWidth, window.innerHeight) < 600;
-  const W = small ? 1536 : 2048;
+  const W = width ?? (small ? 1536 : 2048);
   const target = new THREE.WebGLRenderTarget(W, W / 2, {
     minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false,
   });
@@ -88,6 +105,7 @@ export function makeSky(renderer, options) {
         uBase: { value: new THREE.Color() }, uSeed: { value: 0 }, uDensity: { value: 0.5 }, uDust: { value: 0.6 },
         uGain: { value: 1 }, uScale: { value: 1.6 }, uFocus: { value: new THREE.Vector3(0, 1, 0) },
         uBand: { value: 0 }, uHole: { value: 0 },
+        uGrad: { value: 0 }, uHorizon: { value: new THREE.Color() }, uStars: { value: 0 }, uStarScale: { value: 110 },
       },
     });
     const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), bakeMat);
@@ -115,6 +133,10 @@ export function makeSky(renderer, options) {
     u.uFocus.value.set(...(o.focus ?? [0, 1, 0]));
     u.uBand.value = o.band ?? 0;
     u.uHole.value = o.hole ?? 0;
+    u.uGrad.value = o.horizon ? (o.horizonHeight ?? 0.42) : 0;   // how far up the horizon colour reaches
+    if (o.horizon) u.uHorizon.value.set(o.horizon);
+    u.uStars.value = o.stars ?? 0;
+    u.uStarScale.value = W / 18.6;
     const prev = renderer.getRenderTarget();
     renderer.setRenderTarget(target);
     renderer.render(bakeScene, bakeCam);
@@ -122,7 +144,7 @@ export function makeSky(renderer, options) {
   }
   paint(options);
 
-  return { mesh, material: mat, paint, follow(camera) { mesh.position.copy(camera.position); } };
+  return { mesh, material: mat, texture: target.texture, paint, follow(camera) { mesh.position.copy(camera.position); } };
 }
 
 const STAR_VERT = /* glsl */ `

@@ -36,8 +36,8 @@ body {
   display: flex; flex-direction: column; gap: 14px;
   pointer-events: none;
   background:
-    linear-gradient(to bottom, rgba(4, 5, 12, 0.72), rgba(4, 5, 12, 0) 34%),
-    linear-gradient(to top, rgba(4, 5, 12, 0.78), rgba(4, 5, 12, 0) 30%);
+    linear-gradient(to bottom, rgba(4, 5, 12, calc(0.76 * var(--scrim, 1))), rgba(4, 5, 12, 0) 36%),
+    linear-gradient(to top, rgba(4, 5, 12, calc(0.78 * var(--scrim, 1))), rgba(4, 5, 12, 0) 30%);
   transition: opacity 0.45s ease;
 }
 #hud.away { opacity: 0; }
@@ -50,7 +50,7 @@ body {
   font-family: var(--ui); font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase;
   color: var(--paper-dim);
 }
-#btn-sound { margin-left: auto; }
+#btn-look { margin-left: auto; }
 .chip {
   font-family: var(--ui); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
   color: var(--paper); background: var(--ink); border: 1px solid var(--line); border-radius: 999px;
@@ -98,7 +98,7 @@ body {
 }
 .readout:empty { visibility: hidden; }
 .hint { font-style: italic; font-size: 15px; color: var(--paper-dim); max-width: 46ch; text-shadow: 0 1px 12px rgba(4, 5, 12, 1); }
-.row { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; }
+.row { display: flex; align-items: flex-end; justify-content: center; gap: 10px; width: 100%; }
 #actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; min-width: 0; }
 
 .action {
@@ -135,6 +135,27 @@ body {
 
 button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
+/* colour swatches (the grass paintings) */
+.swatches {
+  display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+  background: var(--ink); border: 1px solid var(--line); border-radius: 999px;
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+}
+.swatch {
+  width: 38px; height: 38px; padding: 0; border-radius: 50%; cursor: pointer;
+  background: var(--sw); border: 2px solid rgba(4, 5, 12, 0.55);
+  transition: transform 0.12s, box-shadow 0.2s;
+}
+.swatch[aria-checked="true"] { border-color: var(--paper); box-shadow: 0 0 16px -2px var(--sw); transform: scale(1.12); }
+#actions .break { flex-basis: 100%; height: 0; }
+
+/* "Just look": everything but passing messages steps aside */
+#app.looking #hud { background: none; }
+#app.looking #hud > :not(#toast) { opacity: 0; pointer-events: none; transition: opacity 0.5s ease; }
+#app.looking #hud > :not(#toast) * { pointer-events: none !important; }
+#app.looking #beacons { opacity: 0; pointer-events: none; }
+#app.looking #beacons .beacon { pointer-events: none; }
+
 /* ---------- galaxy map beacons ---------- */
 #beacons { position: absolute; inset: 0; pointer-events: none; transition: opacity 0.45s ease; }
 #beacons.away { opacity: 0; }
@@ -159,22 +180,37 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
 /* ---------- small screens ---------- */
 @media (max-width: 640px) {
-  #app[data-view="wonder"] .wordmark { display: none; }
+  .wordmark { display: none; }
   #hud {
     background:
-      linear-gradient(to bottom, rgba(4, 5, 12, 0.86), rgba(4, 5, 12, 0) 44%),
-      linear-gradient(to top, rgba(4, 5, 12, 0.86), rgba(4, 5, 12, 0) 32%);
+      linear-gradient(to bottom, rgba(4, 5, 12, calc(0.86 * var(--scrim, 1))), rgba(4, 5, 12, 0) 44%),
+      linear-gradient(to top, rgba(4, 5, 12, calc(0.86 * var(--scrim, 1))), rgba(4, 5, 12, 0) 32%);
   }
   .lede, .blurb { font-size: 15px; }
   .wordmark { font-size: 8.5px; letter-spacing: 0.16em; }
   .chip { padding: 0 12px; font-size: 9px; }
-  .action { min-width: 0; padding: 0 16px; flex: 1 1 auto; }
-  .action .verb { font-size: 10px; letter-spacing: 0.1em; }
+  /* phones: arrows flank the status line, so the action buttons get the full width */
+  #controls {
+    display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; gap: 10px;
+    grid-template-areas: "prev readout next" "actions actions actions" "hint hint hint";
+    align-items: center; justify-items: center;
+  }
+  #controls .row { display: contents; }
+  #btn-prev { grid-area: prev; }
+  #btn-next { grid-area: next; }
+  .readout { grid-area: readout; }
+  .hint { grid-area: hint; }
+  #actions { grid-area: actions; width: 100%; gap: 8px; }
+  .action { min-width: 0; min-height: 48px; padding: 0 12px; flex: 1 1 40%; }
+  .action .verb { font-size: 9.5px; letter-spacing: 0.06em; }
+  .action .how { font-size: 7px; letter-spacing: 0.14em; }
   .hint { font-size: 14px; }
   .nav { width: 44px; height: 44px; }
   .beacon { padding: 7px 11px 8px; }
   .beacon .b-name { font-size: 16px; }
-  .beacon .b-tag { font-size: 7px; letter-spacing: 0.14em; }
+  .beacon .b-tag { display: none; }
+  .swatch { width: 36px; height: 36px; }
+  .swatches { gap: 6px; padding: 5px 8px; }
 }
 @media (max-height: 520px) {
   .blurb, .lede { display: none; }

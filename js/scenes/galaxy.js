@@ -98,7 +98,10 @@ function buildGalaxy() {
 }
 
 // Where each wonder sits on the map (radius, angle in degrees). Rough, for looks.
-const SPOTS = { zonama: [36, 205], centerpoint: [17, 35], thonboka: [33, 300], suncrusher: [27, 118] };
+const SPOTS = {
+  zonama: [36, 205], centerpoint: [17, 35], thonboka: [33, 300], suncrusher: [27, 118],
+  cathedral: [43, 72], maw: [38, 345], alderaan: [9, 160], katana: [24, 252],
+};
 
 export function create(app) {
   const scene = new THREE.Scene();
@@ -134,7 +137,7 @@ export function create(app) {
     el.type = 'button'; el.className = 'beacon';
     el.style.setProperty('--c', w.accent);
     const name = document.createElement('span'); name.className = 'b-name'; name.textContent = w.name;
-    const tag = document.createElement('span'); tag.className = 'b-tag'; tag.textContent = w.tag;
+    const tag = document.createElement('span'); tag.className = 'b-tag'; tag.textContent = (w.isNew ? 'New \u00b7 ' : '') + w.tag;
     el.append(name, tag);
     el.addEventListener('click', () => app.go(w.id));
     app.dom.beacons.append(el);
@@ -155,11 +158,13 @@ export function create(app) {
   function placeLabels() {
     frames++;
     const W = app.width, H = app.height, pad = 16;
+    const centre = (v.set(0, 0, 0).project(app.camera).x * 0.5 + 0.5) * W;
     for (const b of beacons) {
       v.copy(b.pos).project(app.camera);
       b.sx = (v.x * 0.5 + 0.5) * W; b.sy = (-v.y * 0.5 + 0.5) * H;
-      if (!b.w || frames % 90 === 0) { b.w = b.el.offsetWidth; b.h = b.el.offsetHeight; }
-      const left = b.sx > W * 0.6;
+      if (!b.w || frames % 90 === 0 || (frames < 300 && frames % 15 === 0)) { b.w = b.el.offsetWidth; b.h = b.el.offsetHeight; }
+      // on a wide screen labels fan outward from the galaxy; on a narrow one they keep to whichever side has room
+      const left = W > 700 ? b.sx < centre : b.sx > W * 0.6;
       b.x = left ? b.sx - b.w - 16 : b.sx + 16;
       b.y = b.sy - b.h / 2;
       b.x = Math.min(W - b.w - pad, Math.max(pad, b.x));
@@ -181,6 +186,7 @@ export function create(app) {
         }
       }
     }
+    for (const b of beacons) b.y = Math.min(b.y, H - 64 - b.h);
     for (const b of beacons) b.el.style.transform = `translate(${b.x.toFixed(1)}px, ${b.y.toFixed(1)}px)`;
   }
 

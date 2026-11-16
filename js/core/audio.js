@@ -9,6 +9,7 @@ export class Sound {
     this.enabled = true;
     this.drone = null;
     this.chargeNodes = null;
+    this.windNodes = null;
     this.pendingDrone = null;
   }
 
@@ -27,6 +28,18 @@ export class Sound {
       this.noiseBuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
       const d = this.noiseBuf.getChannelData(0);
       for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+      // one big shared hall: a burst of noise that dies away is all a reverb needs
+      const rl = Math.floor(this.ctx.sampleRate * 3.4);
+      const imp = this.ctx.createBuffer(2, rl, this.ctx.sampleRate);
+      for (let c = 0; c < 2; c++) {
+        const ch = imp.getChannelData(c);
+        for (let i = 0; i < rl; i++) ch[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / rl, 2.8);
+      }
+      this.reverb = this.ctx.createConvolver();
+      this.reverb.buffer = imp;
+      const wet = this.ctx.createGain();
+      wet.gain.value = 0.8;
+      this.reverb.connect(wet).connect(this.master);
       if (this.pendingDrone) this.ambient(this.pendingDrone);
     }
     if (this.ctx.state === 'suspended') this.ctx.resume();
@@ -40,7 +53,15 @@ export class Sound {
 
   get ready() { return this.enabled && this.ctx && this.ctx.state === 'running'; }
 
-  tone({ freq = 440, to = null, type = 'sine', dur = 0.6, gain = 0.18, attack = 0.012, delay = 0 }) {
+  /** Feed a node into the shared hall reverb. */
+  send(node, amount) {
+    if (!amount || !this.reverb) return;
+    const s = this.ctx.createGain();
+    s.gain.value = amount;
+    node.connect(s).connect(this.reverb);
+  }
+
+  tone({ freq = 440, to = null, type = 'sine', dur = 0.6, gain = 0.18, attack = 0.012, delay = 0, wet = 0 }) {
     if (!this.ready) return;
     const t = this.ctx.currentTime + delay;
     const o = this.ctx.createOscillator(), g = this.ctx.createGain();
@@ -51,6 +72,7 @@ export class Sound {
     g.gain.exponentialRampToValueAtTime(gain, t + attack);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     o.connect(g).connect(this.master);
+    this.send(g, wet);
     o.start(t); o.stop(t + dur + 0.05);
   }
 
@@ -74,9 +96,74 @@ export class Sound {
   /** A soft bell on a pentatonic scale. */
   chime(i = 0, root = 261.6, gain = 0.16, delay = 0) {
     const f = note(root, i);
-    this.tone({ freq: f, dur: 1.6, gain, delay });
+    this.tone({ freq: f, dur: 1.6, gain, delay, wet: 0.35 });
     this.tone({ freq: f * 2.005, dur: 0.9, gain: gain * 0.35, delay });
     this.tone({ freq: f * 3.01, dur: 0.4, gain: gain * 0.12, delay });
+  }
+
+  /** A breathy organ-pipe voice with a long tail. */
+  pipe(freq, { dur = 2.4, gain = 0.13, delay = 0, wet = 0.9 } = {}) {
+    if (!this.ready) return;
+    const t = this.ctx.currentTime + delay;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(gain, t + 0.06);
+    g.gain.exponentialRampToValueAtTime(gain * 0.5, t + 0.45);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    for (const [m, type, lvl] of [[1, 'sine', 1], [1.003, 'triangle', 0.4], [2, 'sine', 0.2], [3, 'sine', 0.05]]) {
+      const o = this.ctx.createOscillator(), og = this.ctx.createGain();
+      o.type = type; o.frequency.value = freq * m; og.gain.value = lvl;
+      o.connect(og).connect(g);
+      o.start(t); o.stop(t + dur + 0.05);
+    }
+    // the chiff: a puff of air as the pipe starts to speak
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.noiseBuf; src.loop = true;
+    const f = this.ctx.createBiquadFilter();
+    f.type = 'bandpass'; f.frequency.value = Math.min(9000, freq * 3); f.Q.value = 5;
+    const ng = this.ctx.createGain();
+    ng.gain.setValueAtTime(0.0001, t);
+    ng.gain.exponentialRampToValueAtTime(1.6, t + 0.03);
+    ng.gain.exponentialRampToValueAtTime(0.12, t + 0.3);
+    ng.gain.exponentialRampToValueAtTime(0.0001, t + dur * 0.8);
+    src.connect(f).connect(ng).connect(g);
+    src.start(t); src.stop(t + dur + 0.05);
+    g.connect(this.master);
+    this.send(g, wet);
+  }
+
+  /** Open air moving. Call setWind(0..1) to make it blow harder. */
+  startWind() {
+    if (!this.ready || this.windNodes) return;
+    const t = this.ctx.currentTime;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.noiseBuf; src.loop = true;
+    const f = this.ctx.createBiquadFilter();
+    f.type = 'bandpass'; f.frequency.value = 320; f.Q.value = 0.6;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    const lfo = this.ctx.createOscillator(), lg = this.ctx.createGain();
+    lfo.frequency.value = 0.13; lg.gain.value = 110;
+    lfo.connect(lg).connect(f.frequency);
+    src.connect(f).connect(g).connect(this.master);
+    src.start(); lfo.start();
+    this.windNodes = { src, f, g, lfo };
+    this.setWind(0);
+  }
+
+  setWind(v) {
+    const n = this.windNodes; if (!n) return;
+    const t = this.ctx.currentTime;
+    n.f.frequency.setTargetAtTime(300 + v * 1000, t, 0.4);
+    n.g.gain.setTargetAtTime(0.03 + v * 0.2, t, 0.4);
+  }
+
+  stopWind() {
+    const n = this.windNodes; if (!n) return;
+    const t = this.ctx.currentTime;
+    n.g.gain.setTargetAtTime(0.0001, t, 0.3);
+    n.src.stop(t + 2); n.lfo.stop(t + 2);
+    this.windNodes = null;
   }
 
   blip() { this.tone({ freq: 880, to: 1320, dur: 0.12, gain: 0.07, type: 'triangle' }); }
