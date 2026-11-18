@@ -48,10 +48,26 @@ export class Sound {
   setEnabled(on) {
     this.enabled = on;
     if (on) this.wake();
-    if (this.master) this.master.gain.setTargetAtTime(on ? 0.55 : 0, this.ctx.currentTime, 0.08);
+    if (this.master) {
+      this.master.gain.cancelScheduledValues(this.ctx.currentTime);
+      this.master.gain.setTargetAtTime(on ? 0.55 : 0, this.ctx.currentTime, 0.08);
+    }
   }
 
   get ready() { return this.enabled && this.ctx && this.ctx.state === 'running'; }
+
+  /** Cut every sound at once, then let it creep back after `sec` seconds. */
+  silence(sec = 3, back = 2.5) {
+    if (!this.master) return;
+    const t = this.ctx.currentTime, g = this.master.gain;
+    g.cancelScheduledValues(t);
+    g.setValueAtTime(g.value, t);
+    g.linearRampToValueAtTime(0, t + 0.03);
+    if (this.enabled) {
+      g.setValueAtTime(0, t + sec);
+      g.linearRampToValueAtTime(0.55, t + sec + back);
+    }
+  }
 
   /** Feed a node into the shared hall reverb. */
   send(node, amount) {

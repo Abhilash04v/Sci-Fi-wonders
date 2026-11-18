@@ -17,10 +17,17 @@ import * as cathedral from './scenes/cathedral.js';
 import * as maw from './scenes/maw.js';
 import * as alderaan from './scenes/alderaan.js';
 import * as katana from './scenes/katana.js';
+import * as deathstar from './scenes/deathstar.js';
+import * as coruscant from './scenes/coruscant.js';
+import * as cloudcity from './scenes/cloudcity.js';
+import * as holdo from './scenes/holdo.js';
 
-const PHASE = 2;
-const WONDERS = [zonama, centerpoint, thonboka, suncrusher, cathedral, maw, alderaan, katana];
-const COUNT = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve'][WONDERS.length] ?? String(WONDERS.length);
+const PHASE = 3;
+const WONDERS = [zonama, centerpoint, thonboka, suncrusher, cathedral, maw, alderaan, katana, deathstar, coruscant, cloudcity, holdo];
+const UNSEEN = WONDERS.filter((w) => !w.meta.legend).length, LEGENDS = WONDERS.length - UNSEEN;
+const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
+const word = (n) => WORDS[n] ?? String(n);
+const COUNT = word(WONDERS.length).replace(/^./, (c) => c.toUpperCase());
 const SCENES = { map: galaxy };
 for (const w of WONDERS) SCENES[w.meta.id] = w;
 
@@ -39,7 +46,9 @@ try {
 
 const coarse = window.matchMedia('(pointer: coarse)').matches;
 const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-const px = Math.min(window.devicePixelRatio || 1, coarse ? 1.75 : 2);
+const pxMax = Math.min(window.devicePixelRatio || 1, coarse ? 1.75 : 2);
+const pxMin = Math.min(pxMax, 1);
+let px = pxMax;
 renderer.setPixelRatio(px);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
@@ -95,6 +104,18 @@ const app = {
   go,
   travel,
 
+  /** Tint the whole picture for a moment (a CSS filter on the canvas), then ease back. */
+  grade(filter, hold = 2, fade = 1.5) {
+    clearTimeout(app._gradeTimer);
+    canvas.style.transition = 'none';
+    canvas.style.filter = filter;
+    app._gradeTimer = setTimeout(() => {
+      canvas.style.transition = `filter ${fade}s ease`;
+      canvas.style.filter = '';
+    }, hold * 1000);
+  },
+  ungrade() { clearTimeout(app._gradeTimer); canvas.style.transition = 'none'; canvas.style.filter = ''; },
+
   /** White-out. `amount` 0..1, then fades over `fade` seconds. */
   flash(amount = 1, fade = 0.8, color = '#ffffff') {
     const a = reduced ? Math.min(amount, 0.35) : amount;
@@ -129,6 +150,13 @@ const app = {
     if (verb !== undefined) b.querySelector('.verb').textContent = verb;
     if (how !== undefined) b.querySelector('.how').textContent = how;
     if (disabled !== undefined) b.disabled = disabled;
+  },
+
+  /** Swap the scene's buttons, for scenes that change mode (a trench run, a city dive). */
+  setActions(list) {
+    if (!current) return;
+    current.actions = list;
+    buildActions(current);
   },
 
   pick(ndc, objects) {
@@ -194,7 +222,7 @@ function buildActions(inst) {
       b.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.repeat && !busy) { b.classList.add('held'); a.down?.(); } });
       b.addEventListener('keyup', (e) => { if (e.key === 'Enter') release(); });
     } else {
-      b.addEventListener('click', () => { if (!busy) { sound.wake(); a.down?.(); } });
+      b.addEventListener('click', () => { if (!busy) { sound.wake(); foldCard(); a.down?.(); } });
     }
     box.append(b);
     actionButtons.set(a.id, b);
@@ -211,11 +239,12 @@ function showCard(meta) {
   $('wordmark').textContent = isMap ? `Phase ${PHASE} · ${COUNT} wonders` : 'Wonders Unseen';
   if (!isMap) {
     const i = WONDERS.findIndex((w) => w.meta.id === meta.id);
-    $('card-kicker').textContent = `Wonder ${i + 1} of ${WONDERS.length}` + (meta.isNew ? ' \u00b7 New' : '');
+    $('card-kicker').textContent = `Wonder ${i + 1} of ${WONDERS.length}` + (meta.legend ? ' \u00b7 Legend' : '') + (meta.isNew ? ' \u00b7 New' : '');
     $('card-name').textContent = meta.name;
     $('card-tag').textContent = meta.tag;
     $('card-blurb').textContent = meta.blurb;
-    $('card-since').textContent = `In print since ${meta.since} · On screen: never`;
+    $('card-since').textContent = meta.legend ? `On screen since ${meta.screen}` : `In print since ${meta.since} · On screen: never`;
+    unfoldCard();
   }
   app.hint(meta.hint ?? '');
   app.readout('');
@@ -223,9 +252,65 @@ function showCard(meta) {
   root.style.setProperty('--scrim', meta.scrim ?? 1);   // bright daytime scenes want a lighter veil behind the text
 }
 
+// ---------------------------------------------------------------- memory
+// Every scene keeps its textures and buffers on the GPU. Twelve of them is too much for a phone,
+// so only the map and the few most recent wonders stay loaded; the rest are rebuilt on the next visit.
+const KEEP = coarse ? 3 : 5;
+const recent = [];
+function disposeInstance(id) {
+  const inst = instances[id];
+  if (!inst) return;
+  inst.dispose?.();
+  inst.scene.traverse((o) => {
+    o.geometry?.dispose();
+    const mats = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
+    for (const m of mats) {
+      for (const v of Object.values(m)) if (v?.isTexture) v.dispose();
+      for (const u of Object.values(m.uniforms ?? {})) if (u?.value?.isTexture) u.value.dispose();
+      m.dispose();
+    }
+    o.userData.dispose?.();
+  });
+  delete instances[id];
+}
+function remember(id) {
+  if (id === 'map') return;
+  const at = recent.indexOf(id);
+  if (at >= 0) recent.splice(at, 1);
+  recent.push(id);
+  while (recent.length > KEEP) {
+    const old = recent.shift();
+    if (old !== currentId) disposeInstance(old);
+  }
+}
+
+// ---------------------------------------------------------------- resolution
+// If frames run slow, draw fewer pixels; when there is headroom again, draw more.
+let perfWait = 3, perfSum = 0, perfN = 0, perfCool = 0;
+function setPx(v) {
+  if (v === px) return;
+  px = v; app.px = v;
+  renderer.setPixelRatio(v);
+  resize();
+  for (const inst of Object.values(instances)) {
+    inst.scene.traverse((o) => { const u = o.material?.uniforms?.uPx; if (u) u.value = v; });
+  }
+}
+function watchFrameRate(raw) {
+  if (perfWait > 0) { perfWait -= raw; return; }
+  perfCool = Math.max(0, perfCool - raw);
+  perfSum += raw; perfN++;
+  if (perfSum < 2) return;
+  const avg = perfSum / perfN;
+  perfSum = perfN = 0;
+  if (avg > 1 / 38 && px > pxMin) { setPx(Math.max(pxMin, px - 0.25)); perfCool = 20; }
+  else if (avg < 1 / 57 && px < pxMax && perfCool <= 0) setPx(Math.min(pxMax, px + 0.25));
+}
+
 function activate(id) {
   const mod = SCENES[id];
   const inst = instances[id] ??= mod.create(app);
+  perfWait = 3;
   current = inst; currentId = id;
   renderPass.scene = inst.scene;
   app.baseFov = mod.meta.fov ?? 50;
@@ -243,6 +328,7 @@ function activate(id) {
   buildActions(inst);
   inst.enter?.();
   sound.ambient(mod.meta.drone);
+  remember(id);
   try { history.replaceState(null, '', id === 'map' ? '#map' : `#${id}`); } catch {}
 }
 
@@ -263,6 +349,7 @@ async function go(id) {
   await tween(0.95, (k) => { warp.amount = easeIn(k); app.fovKick = 26 * easeIn(k); });
   flashEl.style.transition = 'none'; flashEl.style.background = '#eaf3ff'; flashEl.style.opacity = reduced ? 0.4 : 1;
   current.leave?.();
+  app.ungrade();
   activate(id);
   await wait(0.12);                       // a few frames under the flash for shaders to warm up
   sound.whoosh(0.9, false);
@@ -298,10 +385,105 @@ function step(delta) {
   go(WONDERS[(i + delta + WONDERS.length) % WONDERS.length].meta.id);
 }
 
+// ---------------------------------------------------------------- the tour
+// The tour visits every wonder and performs its best moment, on a loop, until someone takes over.
+const tour = { on: false, token: 0 };
+function makeCue(token, id) {
+  const live = () => tour.on && tour.token === token && currentId === id;
+  const find = (aid) => (current?.actions ?? []).find((a) => a.id === aid);
+  const cue = {
+    live,
+    async wait(sec) { const end = app.time + sec; while (live() && app.time < end) await wait(0.05); return live(); },
+    async until(fn, max = 20) { const end = app.time + max; while (live() && app.time < end && !fn()) await wait(0.05); return live(); },
+    press(aid) {
+      const a = find(aid), b = actionButtons.get(aid);
+      if (!live() || !a || b?.disabled) return false;
+      b?.classList.add('held'); setTimeout(() => b?.classList.remove('held'), 260);
+      a.down?.();
+      return true;
+    },
+    async hold(aid, sec, fn) {
+      const a = find(aid), b = actionButtons.get(aid);
+      if (!live() || !a || b?.disabled) return false;
+      b?.classList.add('held'); a.down?.();
+      if (fn) await cue.until(fn, sec); else await cue.wait(sec);
+      if (b?.classList.contains('held')) { b.classList.remove('held'); if (currentId === id) a.up?.(); }
+      return live();
+    },
+    choose(aid, value) {
+      const a = find(aid);
+      if (!live() || !a) return;
+      a.value = value;
+      document.querySelectorAll('.swatch').forEach((el) => el.setAttribute('aria-checked', String(el.id === `swatch-${value}`)));
+      a.pick?.(value);
+    },
+    say(text, sec = 3.4) { if (live()) app.toast(text, sec); },
+  };
+  return cue;
+}
+async function runTour() {
+  const token = ++tour.token;
+  tour.on = true;
+  root.classList.add('touring');
+  $('btn-stop').hidden = false; $('btn-look').hidden = true;
+  const startAt = Math.max(0, WONDERS.findIndex((w) => w.meta.id === currentId));
+  for (let i = startAt; tour.on && tour.token === token; i = (i + 1) % WONDERS.length) {
+    const id = WONDERS[i].meta.id;
+    while (busy) await wait(0.1);
+    if (!tour.on || tour.token !== token) break;
+    if (currentId !== id) await go(id);
+    while (busy) await wait(0.1);
+    if (!tour.on || tour.token !== token || currentId !== id) break;
+    app.hint('The tour plays each wonder\u2019s best moment. Tap anywhere to take over.');
+    const cue = makeCue(token, id);
+    await cue.wait(1.4);
+    if (current.demo) await Promise.race([current.demo(cue), cue.wait(48)]);
+    else await cue.wait(12);
+    await cue.wait(1.8);
+  }
+}
+function stopTour() {
+  if (!tour.on) return;
+  tour.on = false; tour.token++;
+  root.classList.remove('touring');
+  $('btn-stop').hidden = true; $('btn-look').hidden = false;
+  for (const a of current?.actions ?? []) {
+    const b = actionButtons.get(a.id);
+    if (a.kind === 'hold' && b?.classList.contains('held')) { b.classList.remove('held'); a.up?.(); }
+  }
+  const meta = SCENES[currentId]?.meta;
+  if (meta) app.hint(meta.hint ?? '');
+  app.toast('Over to you.', 1.8);
+}
+app.touring = () => tour.on;
+app.fold = () => $('card').classList.add('folded');
+app.unfold = unfoldCard;
+$('btn-tour').addEventListener('click', () => { sound.wake(); runTour(); });
+$('btn-stop').addEventListener('click', stopTour);
+// a real press on any control means the visitor wants the wheel back
+$('actions').addEventListener('pointerdown', (e) => { if (e.isTrusted) stopTour(); }, true);
+
+// ---------------------------------------------------------------- the story card
+// On a phone the card covers a lot of the view, so it folds down to the name once you start playing.
+let foldTimer = 0;
+const narrow = () => app.width < 700 || app.height < 560;
+function foldCard() { if (narrow()) $('card').classList.add('folded'); }
+function unfoldCard() {
+  $('card').classList.remove('folded');
+  clearTimeout(foldTimer);
+  foldTimer = setTimeout(foldCard, 9000);
+}
+$('card-name').addEventListener('click', () => {
+  if (!narrow()) return;
+  const folded = $('card').classList.toggle('folded');
+  clearTimeout(foldTimer);
+  if (!folded) foldTimer = setTimeout(foldCard, 12000);
+});
+
 // ---------------------------------------------------------------- input
-$('btn-map').addEventListener('click', () => go('map'));
-$('btn-prev').addEventListener('click', () => step(-1));
-$('btn-next').addEventListener('click', () => step(1));
+$('btn-map').addEventListener('click', () => { stopTour(); go('map'); });
+$('btn-prev').addEventListener('click', () => { stopTour(); step(-1); });
+$('btn-next').addEventListener('click', () => { stopTour(); step(1); });
 $('btn-sound').addEventListener('click', (e) => {
   const on = !sound.enabled;
   sound.setEnabled(on);
@@ -326,6 +508,8 @@ const ndcOf = (e) => {
 
 canvas.addEventListener('pointerdown', (e) => {
   sound.wake();
+  stopTour();
+  foldCard();
   try { canvas.setPointerCapture(e.pointerId); } catch {}
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, t: performance.now() });
   // Shift-drag, right-drag or two fingers always turn the camera, even where a plain drag steers or paints.
@@ -386,6 +570,7 @@ window.addEventListener('keydown', (e) => {
   if (e.repeat) return;
   sound.wake();
   keysDown.add(k);
+  if (tour.on) { stopTour(); if (k === 'Escape') return; }
   if (busy || !current) return;
   if (root.classList.contains('looking') && (k === 'Escape' || k === 'l')) { setLooking(false); return; }
   if (k === 'l') { setLooking(true); return; }
@@ -441,8 +626,10 @@ new ResizeObserver(resize).observe(root);
 
 let last = performance.now();
 function frame(now) {
-  const dt = Math.min(0.05, Math.max(0.0001, (now - last) / 1000));
+  const raw = Math.max(0.0001, (now - last) / 1000);
+  const dt = Math.min(0.05, raw);
   last = now;
+  if (!document.hidden) watchFrameRate(Math.min(raw, 0.25));
   app.time += dt;
   runTweens(dt);
   if (current) {
@@ -457,7 +644,7 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 
-$('lede').textContent = `${COUNT} marvels the Star Wars novels described and no film ever showed. Pick one and play with it.`;
+$('lede').textContent = `${COUNT} marvels from a galaxy far away: ${word(UNSEEN)} the novels described and no film ever showed, and ${word(LEGENDS)} legends you have seen, from places the films never took you.`;
 resize();
 const start = (location.hash || '').replace('#', '');
 go(SCENES[start] ? start : 'map');

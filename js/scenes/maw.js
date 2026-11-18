@@ -11,7 +11,6 @@ export const meta = {
   blurb: 'A tangle of black holes that swallows any ship foolish enough to enter. In the one calm pocket at its heart sits the most secret laboratory in the galaxy.',
   since: 1994,
   accent: '#ff6f91',
-  isNew: true,
   hint: 'Drag from the ship to aim, then let go. Gravity bends your path, so aim wide and let it pull you in.',
   bloom: { strength: 0.7, radius: 0.65, threshold: 0.68 },
   drone: 36.7,
@@ -502,6 +501,19 @@ export function create(app) {
       aiming = false;
       if (aimFrom(ndc) > 3) launch();
     },
+    async demo(cue) {
+      cue.say('Thread a ship through a knot of black holes.', 3.2);
+      if (state === 'docked') { nextPath(); if (!(await cue.wait(2.4))) return; }
+      if (!(await cue.until(() => state === 'aim' && !morphing, 6))) return;
+      const OFF = [0, 10.9, -7.1];   // known good aims, found by flying each path offline
+      aimAngle = Math.atan2(-start.y, -start.x) + (OFF[path] * Math.PI) / 180;
+      aimSpeed = 12; dirty = true;
+      if (!(await cue.wait(1.8))) return;
+      cue.press('launch');
+      await cue.until(() => state === 'docked' || state === 'aim', 18);
+      await cue.wait(3);
+    },
+
     update(dt, t) {
       stateT += dt;
       // ---- aim with the keys too

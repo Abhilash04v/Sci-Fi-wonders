@@ -244,6 +244,18 @@ export function create(app) {
       app.sound.chime(n, 196, 0.16);
       app.sound.chime(n + 2, 196, 0.07, 0.22);
     },
+    async demo(cue) {
+      cue.say('A planet that is alive. Watch it answer.', 3.2);
+      if (!(await cue.wait(1.5))) return;
+      this.onTap(new THREE.Vector2(0.02, 0.05));
+      if (!(await cue.wait(1.4))) return;
+      this.onTap(new THREE.Vector2(-0.1, 0.14));
+      if (!(await cue.wait(1.6))) return;
+      await cue.hold('jump', 3.2, () => charge >= 1);
+      await cue.until(() => state === 'idle', 14);
+      await cue.wait(3);
+    },
+
     update(dt, t) {
       if (state === 'charging') {
         charge = Math.min(1, charge + dt / 2.3);

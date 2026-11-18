@@ -11,7 +11,6 @@ export const meta = {
   blurb: 'On a world that no longer exists, artists planted whole plains with coloured grasses and flowers. The pictures were so large that you could only take them in from the air.',
   since: 1995,
   accent: '#f6d76a',
-  isNew: true,
   hint: 'Pick a colour and drag across the plain to plant it. Then fly over what you made.',
   bloom: { strength: 0.28, radius: 0.5, threshold: 0.92 },
   scrim: 0.45,
@@ -346,6 +345,26 @@ export function create(app) {
     },
     onPointerMove(e, ndc) { if (painting) paintAt(ndc, false); },
     onPointerUp() { painting = false; },
+    async demo(cue) {
+      cue.say('Plant a picture the size of a city.', 3.2);
+      if (flying) setView(false);
+      const picks = ['rose', 'sky', 'gold'];
+      for (let k = 0; k < 3 && cue.live(); k++) {
+        cue.choose('colour', picks[k]);
+        const r0 = (0.17 + k * 0.11) * W;
+        for (let i = 0; i <= 24 && cue.live(); i++) {
+          const a = (i / 24) * Math.PI * 0.55 + k * 0.9;
+          stamp(W / 2 + Math.cos(a) * r0, W / 2 + Math.sin(a) * r0);
+          await cue.wait(0.04);
+        }
+      }
+      if (!(await cue.wait(1))) return;
+      cue.press('view');
+      await cue.hold('wind', 4);
+      await cue.wait(3);
+      if (cue.live() && flying) cue.press('view');
+    },
+
     update(dt, t) {
       wind += ((blowing ? 1 : 0) - wind) * (1 - Math.exp(-dt * (blowing ? 1.6 : 0.8)));
       app.meter('wind', wind, wind > 0.8);

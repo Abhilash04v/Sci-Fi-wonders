@@ -12,7 +12,6 @@ export const meta = {
   blurb: 'On a world of endless storms, a winged people raised a cathedral of crystal pipes as tall as a mountain. When the wind blows through it, it sings. They have never let anyone record the song.',
   since: 1994,
   accent: '#9fe4ff',
-  isNew: true,
   hint: 'Tap a spire to open it. The wind plays every open spire it sweeps past. Hold to call the storm.',
   bloom: { strength: 0.6, radius: 0.65, threshold: 0.7 },
   drone: 0,
@@ -361,6 +360,14 @@ export function create(app) {
       if (s.open) sing(s, 1); else app.sound.tone({ freq: s.freq * 2, dur: 0.12, gain: 0.03, type: 'triangle' });
       showReadout();
     },
+    async demo(cue) {
+      cue.say('The wind plays every open spire.', 3.2);
+      cue.press('melody');
+      if (!(await cue.wait(4))) return;
+      await cue.hold('storm', 6.5);
+      await cue.wait(4);
+    },
+
     update(dt, t) {
       // ---- weather
       const was = storm;

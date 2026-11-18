@@ -350,6 +350,15 @@ export function create(app) {
       return true;
     },
     onPointerUp() { stopPull(); },
+    async demo(cue) {
+      cue.say('Tow a wandering world into orbit.', 3.2);
+      for (let i = 0; i < 2 && cue.live() && !done; i++) {
+        if (!(await cue.wait(1.2))) return;
+        await cue.hold('pull', 9, () => zone >= 0);
+      }
+      await cue.wait(2.5);
+    },
+
     update(dt, t) {
       star.tick(t);
       star.group.rotation.y += dt * 0.02;

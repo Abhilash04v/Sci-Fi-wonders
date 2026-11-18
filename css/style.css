@@ -50,7 +50,8 @@ body {
   font-family: var(--ui); font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase;
   color: var(--paper-dim);
 }
-#btn-look { margin-left: auto; }
+#btn-look, #btn-stop { margin-left: auto; }
+#btn-stop { color: var(--accent); border-color: var(--accent); }
 .chip {
   font-family: var(--ui); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
   color: var(--paper); background: var(--ink); border: 1px solid var(--line); border-radius: 999px;
@@ -135,6 +136,31 @@ body {
 
 button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
+/* the tour */
+.cta-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-block: 4px; }
+.cta {
+  pointer-events: auto; cursor: pointer; min-height: 46px; padding: 0 24px;
+  font-family: var(--ui); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
+  color: #120c02; background: var(--accent); border: 0; border-radius: 999px;
+  box-shadow: 0 0 28px -6px var(--accent);
+  transition: transform 0.12s, box-shadow 0.2s;
+}
+.cta:hover { transform: translateY(-1px); box-shadow: 0 0 36px -4px var(--accent); }
+.cta:active { transform: scale(0.97); }
+.cta-note { font-style: italic; font-size: 14px; color: var(--paper-dim); }
+#app.touring .hint { color: var(--accent); }
+
+/* the story card folds down to its name on small screens */
+#card.folded .tag, #card.folded .blurb, #card.folded .fine { display: none; }
+
+/* the Death Star's targeting computer */
+.tcomp {
+  position: absolute; right: max(16px, env(safe-area-inset-right, 0px)); top: 72px;
+  width: 210px; height: 156px; border: 1px solid rgba(255, 179, 71, 0.55); border-radius: 6px;
+  pointer-events: none; box-shadow: 0 0 24px -8px rgba(255, 140, 40, 0.7);
+}
+@media (max-width: 640px) { .tcomp { top: 150px; width: 150px; height: 112px; } }
+
 /* colour swatches (the grass paintings) */
 .swatches {
   display: flex; align-items: center; gap: 8px; padding: 6px 10px;
@@ -163,16 +189,24 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .beacon {
   --c: var(--accent);
   position: absolute; left: 0; top: 0; pointer-events: auto; cursor: pointer;
-  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
-  padding: 9px 16px 10px; text-align: left; color: var(--paper);
-  background: var(--ink); border: 1px solid var(--line); border-left: 2px solid var(--c); border-radius: 2px 14px 14px 2px;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+  padding: 6px 12px 7px; text-align: left; color: var(--paper);
+  background: var(--ink); border: 1px solid var(--line); border-left: 2px solid var(--c); border-radius: 2px 12px 12px 2px;
   -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
   transition: border-color 0.2s, background 0.2s;
   will-change: transform;
 }
-.beacon:hover, .beacon:focus-visible { border-color: var(--c); background: rgba(9, 11, 22, 0.82); }
-.beacon .b-name { font-family: var(--display); font-style: italic; font-size: 19px; line-height: 1.1; white-space: nowrap; }
-.beacon .b-tag { font-family: var(--ui); font-size: 8px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--c); white-space: nowrap; }
+.beacon:hover, .beacon:focus-visible { border-color: var(--c); background: rgba(9, 11, 22, 0.86); z-index: 2; }
+.beacon .b-name { font-family: var(--display); font-style: italic; font-size: 17px; line-height: 1.15; white-space: nowrap; display: flex; align-items: center; gap: 7px; }
+.beacon .b-new {
+  font-family: var(--ui); font-style: normal; font-size: 7px; letter-spacing: 0.18em; text-transform: uppercase;
+  color: #120c02; background: var(--c); border-radius: 999px; padding: 2px 6px 1px;
+}
+.beacon .b-tag {
+  display: none;
+  font-family: var(--ui); font-size: 7.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--c); white-space: nowrap;
+}
+.beacon:hover .b-tag, .beacon:focus-visible .b-tag { display: block; }
 
 /* ---------- no-WebGL fallback ---------- */
 #fail { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; background: var(--void); }
@@ -206,9 +240,15 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
   .action .how { font-size: 7px; letter-spacing: 0.14em; }
   .hint { font-size: 14px; }
   .nav { width: 44px; height: 44px; }
-  .beacon { padding: 7px 11px 8px; }
-  .beacon .b-name { font-size: 16px; }
+  .beacon { padding: 4px 9px 5px; }
+  .beacon .b-name { font-size: 14px; gap: 5px; }
+  .beacon .b-new { font-size: 6px; padding: 1px 5px; }
   .beacon .b-tag { display: none; }
+  #card .name { pointer-events: auto; cursor: pointer; }
+  #card.folded .name::after { content: ' +'; font-style: normal; font-size: 0.6em; color: var(--accent); vertical-align: middle; }
+  #card.folded .name { font-size: clamp(28px, 8vw, 40px); }
+  .cta { min-height: 42px; padding: 0 18px; font-size: 10px; }
+  .cta-note { display: none; }
   .swatch { width: 36px; height: 36px; }
   .swatches { gap: 6px; padding: 5px 8px; }
 }

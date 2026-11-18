@@ -144,6 +144,7 @@ export function makeSky(renderer, options, width) {
   }
   paint(options);
 
+  mesh.userData.dispose = () => target.dispose();
   return { mesh, material: mat, texture: target.texture, paint, follow(camera) { mesh.position.copy(camera.position); } };
 }
 

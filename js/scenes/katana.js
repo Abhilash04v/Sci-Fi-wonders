@@ -10,7 +10,6 @@ export const meta = {
   blurb: 'Two hundred warships, wired together so that a single crew could fly them all. One day every ship jumped to lightspeed at the same instant, and the whole fleet vanished.',
   since: 1992,
   accent: '#8fb4ff',
-  isNew: true,
   hint: 'Wake the fleet, then drag to steer. Every ship copies yours, one beat behind.',
   bloom: { strength: 0.8, radius: 0.6, threshold: 0.6 },
   drone: 46.2,
@@ -324,6 +323,16 @@ export function create(app) {
     onPointerDown() { if (!awake) return false; steerP.set(0, 0); lastInput = app.time; return true; },
     onPointerMove(ev, ndc, d) { steerP.set(clamp(d.ox / 100, -1, 1), clamp(d.oy / 100, -1, 1)); lastInput = app.time; },
     onPointerUp() { steerP.set(0, 0); },
+    async demo(cue) {
+      cue.say('Two hundred ships, one crew.', 3.2);
+      if (!awake) { cue.press('form'); if (!(await cue.wait(6))) return; }
+      cue.press('form');
+      if (!(await cue.wait(5))) return;
+      await cue.hold('jump', 3, () => charge >= 1);
+      await cue.until(() => state === 'idle', 16);
+      await cue.wait(3);
+    },
+
     update(dt, t) {
       // ---- steer the flagship
       const K = app.keys;

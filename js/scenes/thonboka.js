@@ -353,6 +353,17 @@ export function create(app) {
       lastInput = app.time;
     },
     onPointerUp() { steerP.set(0, 0); },
+    async demo(cue) {
+      cue.say('Sing, and the whole pod sings back.', 3.2);
+      if (!(await cue.wait(1.2))) return;
+      cue.press('sing');
+      if (!(await cue.wait(3.5))) return;
+      cue.press('leap');
+      if (!(await cue.wait(3))) return;
+      cue.press('sing');
+      await cue.wait(4);
+    },
+
     update(dt, t) {
       // ---- steering
       const K = app.keys;

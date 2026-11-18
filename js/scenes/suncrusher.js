@@ -29,7 +29,7 @@ const SUNS = [
 const STAR_POS = new THREE.Vector3(-190, -30, -250);
 const STAR_DIST = STAR_POS.length();
 const STAR_DIR = STAR_POS.clone().normalize();
-const DISH_Y = -1.72;
+const DISH_Y = -0.62;
 
 // ---------------------------------------------------------------- the ship
 const ARMOR_VERT = /* glsl */ `
@@ -55,9 +55,11 @@ void main(){
   float fres = pow(1.0 - max(dot(N, V), 0.0), 3.0);
   vec3 irid = 0.5 + 0.5 * cos(6.2831 * (fres * 0.9 + dot(N, vec3(0.31, 0.47, 0.23)) * 0.8 + vec3(0.0, 0.33, 0.67)));
   vec3 fill = vec3(0.018, 0.03, 0.07) * (0.55 + 0.45 * N.y);
-  vec3 col = vec3(0.012, 0.014, 0.022) + fill
-    + uStarColor * (sd * 0.5 + sr * 2.2) * uLight
-    + irid * (fres * 0.55 + 0.05)
+  float sky = 0.5 + 0.5 * R.y;
+  vec3 col = vec3(0.01, 0.011, 0.016) + fill * 0.8
+    + uStarColor * (sd * 0.35 + sr * 2.6 + pow(max(dot(R, uStarDir), 0.0), 60.0) * 3.0) * uLight
+    + vec3(0.05, 0.06, 0.09) * sky
+    + irid * (fres * 0.28 + 0.015)
     + vec3(1.0, 0.92, 0.8) * uHit * (0.5 + fres * 2.5);
   gl_FragColor = vec4(col, 1.0);
 }
@@ -73,21 +75,33 @@ function buildShip(accent) {
     },
   });
 
-  // the hull: a tall four-sided shard, squeezed into a blade
-  const profile = [[0, 2.95], [0.1, 2.2], [0.23, 1.1], [0.35, 0.1], [0.41, -0.6], [0.3, -1.1], [0.14, -1.45], [0, -1.5]]
+  // the hull: a long six-sided needle, lying flat with its nose forward
+  const profile = [[0, 3.1], [0.12, 2.35], [0.3, 1.2], [0.47, 0], [0.53, -1.0], [0.45, -1.7], [0.3, -2.0], [0, -2.06]]
     .map(([r, y]) => new THREE.Vector2(r, y));
-  const hull = new THREE.Mesh(new THREE.LatheGeometry(profile, 4), armor);
-  hull.scale.set(1, 1, 0.56);
+  const hull = new THREE.Mesh(new THREE.LatheGeometry(profile, 6).rotateX(-Math.PI / 2), armor);
+  hull.scale.set(1, 0.58, 1);
   ship.add(hull);
 
-  // swept fins
-  const finShape = new THREE.Shape();
-  finShape.moveTo(0.28, -0.05); finShape.lineTo(1.02, -1.5); finShape.lineTo(0.34, -0.98); finShape.closePath();
-  const finGeo = new THREE.ExtrudeGeometry(finShape, { depth: 0.06, bevelEnabled: false }).translate(0, 0, -0.03);
+  // blade wings, swept back and tipped slightly down
+  const bladeShape = new THREE.Shape();
+  bladeShape.moveTo(0.38, 0.35); bladeShape.lineTo(2.15, -1.95); bladeShape.lineTo(1.9, -2.05); bladeShape.lineTo(0.42, -1.25); bladeShape.closePath();
+  const bladeGeo = new THREE.ExtrudeGeometry(bladeShape, { depth: 0.05, bevelEnabled: false }).rotateX(-Math.PI / 2).translate(0, 0.0, 0);
   for (const sx of [1, -1]) {
-    const fin = new THREE.Mesh(finGeo, armor);
-    fin.scale.x = sx;
-    ship.add(fin);
+    const blade = new THREE.Mesh(bladeGeo, armor);
+    blade.scale.set(sx * 0.82, 1, 0.82);
+    blade.rotation.z = -sx * 0.14;
+    ship.add(blade);
+  }
+  const spine = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.16, 2.8), armor);
+  spine.position.set(0, 0.32, 0.25);
+  ship.add(spine);
+  // twin engines at the stern
+  for (const sx of [1, -1]) {
+    const eng = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.19, 0.8, 8).rotateX(Math.PI / 2), armor);
+    eng.position.set(sx * 0.26, -0.02, 1.85);
+    const glow = makeGlow('#ff9a5a', 1.5, 1);
+    glow.position.set(sx * 0.26, -0.02, 2.3);
+    ship.add(eng, glow);
   }
 
   // the resonance dish under the hull
@@ -108,10 +122,10 @@ function buildShip(accent) {
     ship.add(strut);
   }
 
-  // a sliver of cockpit light
-  const cockpit = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.42, 0.02), new THREE.MeshBasicMaterial({ color: new THREE.Color('#9fd8ff').multiplyScalar(1.6) }));
-  cockpit.position.set(0, 1.35, 0.115);
-  cockpit.rotation.x = -0.1;
+  // a sliver of cockpit light along the top of the nose
+  const cockpit = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.02, 0.62), new THREE.MeshBasicMaterial({ color: new THREE.Color('#9fd8ff').multiplyScalar(1.1) }));
+  cockpit.position.set(0, 0.27, -0.95);
+  cockpit.rotation.x = 0.08;
   ship.add(cockpit);
 
   const dishGlow = makeGlow(accent, 1.6, 0.5);
@@ -344,7 +358,7 @@ export function create(app) {
     scene, actions,
     enter() {
       app.rig.set({
-        target: new THREE.Vector3(0, 0.45, 0), radius: 9.5, snap: true,
+        target: new THREE.Vector3(0, 0.1, 0), radius: 8.2, snap: true,
         auto: app.reduced ? 0 : 0.035, minPhi: 0.3, maxPhi: Math.PI - 0.3, minRadius: 4.5, maxRadius: 24, damping: 3.5,
       });
       aimRig(true);
@@ -352,6 +366,15 @@ export function create(app) {
       if (phase === 'after') app.action('fire', { verb: 'Find another star', how: 'Tap to jump' });
     },
     leave() { app.sound.stopCharge(); holding = false; app.bloomKick = 0; },
+    async demo(cue) {
+      if (phase === 'after') { cue.press('fire'); if (!(await cue.until(() => phase === 'idle', 12))) return; await cue.wait(2); }
+      cue.say('One torpedo. One star.', 3);
+      if (!(await cue.wait(1))) return;
+      await cue.hold('fire', 4, () => phase !== 'idle');
+      await cue.until(() => phase === 'after', 30);
+      await cue.wait(3);
+    },
+
     update(dt, t) {
       pt += dt;
       const su = star.material.uniforms;

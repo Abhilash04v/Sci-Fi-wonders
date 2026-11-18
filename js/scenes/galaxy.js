@@ -101,6 +101,7 @@ function buildGalaxy() {
 const SPOTS = {
   zonama: [36, 205], centerpoint: [17, 35], thonboka: [33, 300], suncrusher: [27, 118],
   cathedral: [43, 72], maw: [38, 345], alderaan: [9, 160], katana: [24, 252],
+  deathstar: [21, 186], coruscant: [5, 320], cloudcity: [46, 158], holdo: [44, 272],
 };
 
 export function create(app) {
@@ -137,7 +138,8 @@ export function create(app) {
     el.type = 'button'; el.className = 'beacon';
     el.style.setProperty('--c', w.accent);
     const name = document.createElement('span'); name.className = 'b-name'; name.textContent = w.name;
-    const tag = document.createElement('span'); tag.className = 'b-tag'; tag.textContent = (w.isNew ? 'New \u00b7 ' : '') + w.tag;
+    if (w.isNew) { const pill = document.createElement('span'); pill.className = 'b-new'; pill.textContent = 'New'; name.append(pill); }
+    const tag = document.createElement('span'); tag.className = 'b-tag'; tag.textContent = (w.legend ? 'Legend \u00b7 ' : 'Unseen \u00b7 ') + w.tag;
     el.append(name, tag);
     el.addEventListener('click', () => app.go(w.id));
     app.dom.beacons.append(el);
@@ -171,9 +173,11 @@ export function create(app) {
     }
     // keep labels off the title block
     const ir = intro.getBoundingClientRect(), rr = app.renderer.domElement.getBoundingClientRect();
+    let ceiling = pad;
     if (ir.width) {
       const right = ir.right - rr.left + 10, bottom = ir.bottom - rr.top + 10;
       for (const b of beacons) if (b.x < right && b.y < bottom) b.y = bottom;
+      if (ir.right - rr.left > W * 0.7) ceiling = bottom;   // the title spans the screen on a phone
     }
     // nudge apart any labels that would sit on top of each other
     const order = [...beacons].sort((p, q) => p.y - q.y);
@@ -186,7 +190,10 @@ export function create(app) {
         }
       }
     }
-    for (const b of beacons) b.y = Math.min(b.y, H - 64 - b.h);
+    // if the stack runs off the bottom, slide the whole column up rather than piling labels on top of each other
+    const lowest = Math.max(...beacons.map((b) => b.y + b.h)), limit = H - 64;
+    const room = Math.min(...beacons.map((b) => b.y)) - ceiling;
+    if (lowest > limit) { const lift = Math.min(lowest - limit, Math.max(0, room)); for (const b of beacons) b.y -= lift; }
     for (const b of beacons) b.el.style.transform = `translate(${b.x.toFixed(1)}px, ${b.y.toFixed(1)}px)`;
   }
 
